@@ -43,7 +43,6 @@ export async function ensureUserProfile(user: User) {
       uid: user.uid,
       email: user.email ?? "",
       displayName: user.displayName ?? "Anon",
-      photoURL: user.photoURL ?? undefined,
       createdAt: Date.now(),
       sessionsCompleted: 0,
       customScenarios: [],
@@ -51,6 +50,10 @@ export async function ensureUserProfile(user: User) {
       xp: 0,
       rank: "E",
     };
+    // Only add photoURL if it exists — Firestore rejects undefined
+    if (user.photoURL) {
+      profile.photoURL = user.photoURL;
+    }
     await setDoc(ref, profile);
   }
 }
