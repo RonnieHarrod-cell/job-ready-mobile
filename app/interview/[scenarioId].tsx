@@ -14,10 +14,11 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/contexts/AuthContext";
-import { saveSession, getUserProfile } from "@/lib/firebase";
+import { saveSession, db } from "@/lib/firebase";
 import { PRESET_SCENARIOS } from "@/constants/scenarios";
 import { colors, spacing, radius, fontSize } from "@/constants/theme";
 import type { Scenario } from "@/types";
+import { getDoc, doc } from "firebase/firestore";
 
 const API_BASE =
   process.env.EXPO_PUBLIC_API_URL ?? "https://job-ready-ai.netlify.app";
@@ -43,15 +44,32 @@ export default function InterviewScreen() {
   const [feedbackLoading, setFeedbackLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
-  // Load scenario
+  // Load scenario — check presets first, then Firestore
   useEffect(() => {
-    const preset = PRESET_SCENARIOS.find((s) => s.id === scenarioId);
-    if (preset) {
-      setScenario(preset);
-    } else {
-      Alert.alert("Error", "Scenario not found.");
-      router.back();
+    async function loadScenario() {
+      // Check presets first
+      const preset = PRESET_SCENARIOS.find((s) => s.id === scenarioId);
+      if (preset) {
+        setScenario(preset);
+        return;
+      }
+
+      // Fall back to Firestore for custom/public scenarios
+      try {
+        const snap = await getDoc(doc(db, "scenarios", scenarioId as string));
+        if (snap.exists()) {
+          setScenario({ id: snap.id, ...snap.data() } as Scenario);
+        } else {
+          Alert.alert("Error", "Scenario not found.");
+          router.back();
+        }
+      } catch (err) {
+        Alert.alert("Error", "Failed to load scenario.");
+        router.back();
+      }
     }
+
+    if (scenarioId) loadScenario();
   }, [scenarioId]);
 
   // Start interview once scenario is loaded
@@ -59,7 +77,6 @@ export default function InterviewScreen() {
     if (scenario) sendMessage(null);
   }, [scenario]);
 
-  // Get CV text from profile
   const cvText = profile?.cvText ?? "";
 
   async function sendMessage(userText: string | null) {
@@ -103,7 +120,8 @@ export default function InterviewScreen() {
     ]);
 
     try {
-      const res = await fetch(`${API_BASE}/api/interview`, {
+      // Use the non-streaming feedback-style endpoint instead
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,25 +130,12 @@ export default function InterviewScreen() {
         }),
       });
 
-      if (!res.ok) throw new Error("Stream failed");
+      const data = await res.json();
+      const content = data.content ?? "Something went wrong.";
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          accumulated += decoder.decode(value, { stream: true });
-          const current = accumulated;
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? { ...m, content: current } : m,
-            ),
-          );
-        }
-      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, content } : m)),
+      );
     } catch (err) {
       setMessages((prev) =>
         prev.map((m) =>
@@ -280,7 +285,6 @@ export default function InterviewScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={0}
       >
-        {/* Messages */}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -322,7 +326,6 @@ export default function InterviewScreen() {
           }
         />
 
-        {/* Input */}
         {!sessionEnded && (
           <View style={styles.inputArea}>
             <TextInput
@@ -385,10 +388,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderDefault,
   },
-  backText: {
-    fontSize: fontSize.lg,
-    color: colors.textSecondary,
-  },
+  backText: { fontSize: fontSize.lg, color: colors.textSecondary },
   headerInfo: { flex: 1 },
   headerTitle: {
     fontSize: fontSize.sm,
@@ -481,19 +481,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  thinkingText: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-  },
+  thinkingText: { fontSize: fontSize.sm, color: colors.textMuted },
   emptyChat: {
     alignItems: "center",
     paddingTop: 80,
     gap: spacing.md,
   },
-  emptyChatText: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-  },
+  emptyChatText: { fontSize: fontSize.sm, color: colors.textMuted },
   feedbackCard: {
     margin: spacing.md,
     backgroundColor: colors.bgCard,
@@ -513,10 +507,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
   },
-  feedbackLoadingText: {
-    fontSize: fontSize.sm,
-    color: colors.textMuted,
-  },
+  feedbackLoadingText: { fontSize: fontSize.sm, color: colors.textMuted },
   feedbackText: {
     fontSize: fontSize.sm,
     color: colors.textSecondary,
@@ -564,12 +555,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  sendBtnDisabled: {
-    opacity: 0.4,
-  },
-  sendBtnText: {
-    fontSize: fontSize.lg,
-    color: "#fff",
-    fontWeight: "700",
-  },
+  sendBtnDisabled: { opacity: 0.4 },
+  sendBtnText: { fontSize: fontSize.lg, color: "#fff", fontWeight: "700" },
 });

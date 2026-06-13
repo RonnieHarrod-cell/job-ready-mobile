@@ -1,6 +1,16 @@
 import type { InterviewSession, Scenario, UserProfile } from "@/types";
 import { getApps, initializeApp } from "firebase/app";
-import { getAuth, onAuthStateChanged, type User } from "firebase/auth";
+import {
+  initializeAuth,
+  getReactNativePersistence,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile,
+  signOut,
+  onAuthStateChanged,
+  type User,
+} from "firebase/auth";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   addDoc,
   collection,
@@ -27,7 +37,9 @@ const firebaseConfig = {
 
 const app =
   getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-export const auth = getAuth(app);
+export const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage),
+});
 export const db = getFirestore(app);
 
 export { onAuthStateChanged };
