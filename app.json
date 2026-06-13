@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "job-ready-mobile",
-    "slug": "job-ready-mobile",
+    "slug": "job-ready",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -43,6 +43,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "27c1ac2c-7341-4d07-90a7-ac7c36178709"
+      }
+    },
+    "owner": "hfysuue8e"
   }
 }
